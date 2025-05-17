@@ -90,7 +90,7 @@ class puff_model():
 
         while t < obs_t[-1].item():
             t0 = torch.tensor([t]).repeat(num_obs*num_sensors,1)
-            eps=1e-6
+            eps=1e-10
             
             zero = (tr - t0 > 0).float()
 
