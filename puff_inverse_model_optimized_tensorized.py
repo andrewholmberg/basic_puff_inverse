@@ -1,6 +1,6 @@
 from puff_model_optimized_tensorized import puff_model
 import torch
-import numpy as np
+import numpy as np 
 from cvxopt import matrix, solvers
 solvers.options['show_progress'] = False
 torch.set_default_dtype(torch.float32)

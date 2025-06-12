@@ -5,6 +5,9 @@ from scipy.interpolate import CubicSpline
 import copy
 torch.set_default_dtype(torch.float32)
 import time
+import sys
+from torchcubicspline import(natural_cubic_spline_coeffs, 
+                             NaturalCubicSpline)
 class puff_model():
     def __init__(self, source_locations,sensor_locations, sigma, u_func, v_func, qs,dt,spread=False,t_max = 45*60):
         self.corners = torch.tensor([(0,0),(200,0),(0,200),(200,200)])
@@ -25,11 +28,16 @@ class puff_model():
         self.spread=spread
         print(self.compute_num_puffs())
         t_span = (0,60*60)
-        t_eval = np.linspace(0,60*60,60*60)
-        cs_temp = CubicSpline(t_eval,solve_ivp(lambda t,y:u_func(t),t_span,[0],'RK45',t_eval)['y'][0])
-        self.u_func_ivp = copy.deepcopy(lambda t: torch.tensor(cs_temp(t.detach().numpy())))
-        cs_temp1 = CubicSpline(t_eval,solve_ivp(lambda t,y:v_func(t),t_span,[0],'RK45',t_eval)['y'][0])
-        self.v_func_ivp = copy.deepcopy(lambda t: torch.tensor(cs_temp1(t.detach().numpy())))
+        t_eval = torch.linspace(0,60*60,60*60)
+        # cs_temp = CubicSpline(t_eval,solve_ivp(lambda t,y:u_func(t),t_span,[0],'RK45',t_eval)['y'][0])
+        coefs = natural_cubic_spline_coeffs(t_eval,torch.tensor(solve_ivp(lambda t,y:u_func(t),t_span,[0],'RK45',t_eval)['y'][0]).reshape(-1,1))
+        cs = NaturalCubicSpline(coefs)
+        self.u_func_ivp = copy.deepcopy(lambda t: cs.evaluate(t))
+        coefs1 = natural_cubic_spline_coeffs(t_eval, torch.tensor(solve_ivp(lambda t,y:v_func(t),t_span,[0],'RK45',t_eval)['y'][0]).reshape(-1,1))
+        # cs_temp1 = CubicSpline(t_eval,solve_ivp(lambda t,y:v_func(t),t_span,[0],'RK45',t_eval)['y'][0])
+        # self.v_func_ivp = copy.deepcopy(lambda t: torch.tensor(cs_temp1(t.detach().numpy())))
+        cs1 = NaturalCubicSpline(coefs1)
+        self.v_func_ivp = copy.deepcopy(lambda t: cs1.evaluate(t))
 
 
     def compute_num_puffs(self):
@@ -76,8 +84,9 @@ class puff_model():
 
         tm_base = torch.arange(self.num_puffs, device=obs_t.device).float() * self.dt
         tm = torch.linspace(0,(self.num_puffs-1)*self.dt, self.num_puffs).expand(num_obs, self.num_source_locs, -1)
-
+        print('size tm', tm.storage().size(),'size tr',tr.storage().size())
         t0 = tr - tm
+        print('size t0', t0.storage().size())
 
         XX = X.reshape(-1, 1, 1, 3).expand(-1, self.num_source_locs, self.num_puffs, -1)
         XX = XX.reshape(-1, self.num_source_locs, self.num_puffs * 3)
@@ -97,6 +106,7 @@ class puff_model():
 
         eps=1e-10
         # zero = (tr - t0 > 0).float()
+
         zero = 1
         if self.spread:
             sx,sy,sz =  self.sx*torch.sqrt(((tr-t0)*zero+eps)),  self.sy*torch.sqrt(((tr-t0)*zero+eps)), self.sz*torch.sqrt(((tr-t0)*zero+eps))

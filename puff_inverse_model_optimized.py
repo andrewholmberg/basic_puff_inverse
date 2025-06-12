@@ -47,21 +47,18 @@ class puff_inverse_model:
         self.pm = pm
     
 
-    def solve_inverse_problem(self,obs,obs_t,num_nz, bias_terms = 0,weights=None,numerical=False):
+    def solve_inverse_problem(self,X,obs_t,obs,num_nz, bias_terms = 0,weights=None):
         num_obs = len(obs_t)
-        if numerical:
-            Q = self.pm.return_puff_matrix_numerical(obs,obs_t)
-        else:
-            Q = self.pm.return_puff_matrix(obs,obs_t)
+        Q = self.pm.return_puff_matrix(X,obs_t)
         if weights is None:
-            weights = weights = torch.diag(torch.ones(torch.numel(obs)))
+            weights = torch.diag(torch.ones(torch.numel(obs))).float()
         if bias_terms == 1:
-                Q = torch.cat([Q,torch.ones(len(Q),1)],dim=1)
+                Q = torch.cat([Q, torch.ones(len(Q), 1)], dim=1)
         elif bias_terms > 1:
             bias_terms = obs.shape[1]
             for bias in range(bias_terms):
                 temp = torch.zeros(torch.numel(obs),1)
-                temp[bias*num_obs:(bias+1)*num_obs] = 1
+                temp[bias*num_obs:(bias+1)*num_obs] = 1.
                 Q = torch.cat([Q,temp],dim=1)
         P = 2*Q.T@weights@Q
         q = -2*obs.T.reshape(-1,1).T@weights@Q
