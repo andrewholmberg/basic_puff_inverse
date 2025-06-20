@@ -6,8 +6,8 @@ import copy
 
 
 class puff_model():
-    def __init__(self, source_locations,sensor_locations, sigma, u_func, v_func, qs,dt,spread=False,t_max = 45*60):
-        self.corners = torch.tensor([(0,0),(200,0),(0,200),(200,200)])
+    def __init__(self, source_locations,sensor_locations, sigma, u_func, v_func, qs,dt,spread=False, t0 = 0, t_max = 45*60):
+        self.corners = torch.tensor([(0,0),(150,0),(0,150),(150,150)])
         self.sx = sigma[0]
         self.sy = sigma[1]
         self.sz = sigma[2]
@@ -19,13 +19,14 @@ class puff_model():
         self.v_func = v_func
         self.q = qs
         self.constant = 1/((2*torch.pi)**(3/2) * self.sy**2*self.sz)
-        self.sensor_locations = torch.tensor(sensor_locations)
+        self.sensor_locations = sensor_locations
         self.dt = dt
+        self.t0 = t0
         self.t_max = t_max
         self.spread=spread
         self.compute_num_puffs()
-        t_span = (0,60*60)
-        t_eval = np.linspace(0,60*60,60*60)
+        t_span = (t0,t_max)
+        t_eval = np.linspace(t0,t_max,int(t_max))
         cs_temp = CubicSpline(t_eval,solve_ivp(lambda t,y:u_func(t),t_span,[0],'RK45',t_eval)['y'][0])
         self.u_func_ivp = copy.deepcopy(lambda t: torch.tensor(cs_temp(t.detach().numpy())))
         cs_temp1 = CubicSpline(t_eval,solve_ivp(lambda t,y:v_func(t),t_span,[0],'RK45',t_eval)['y'][0])
@@ -35,7 +36,9 @@ class puff_model():
     def compute_num_puffs(self):
         bounds = self.corners.repeat(1,self.source_locations.shape[0])
         source_locations = self.source_locations[:,:2].reshape(1,-1).repeat(bounds.shape[0],1)
-        min_amp  = torch.min(torch.sqrt(self.u_func(torch.linspace(0,self.t_max,int(self.t_max//self.dt)))**2 + self.v_func(torch.linspace(0,self.t_max,int(self.t_max//self.dt)))**2))
+        min_amp  = torch.median(torch.sqrt(self.u_func(torch.linspace(self.t0,self.t_max,int((self.t_max - self.t0)//self.dt)))**2 + self.v_func(torch.linspace(self.t0,self.t_max,int((self.t_max - self.t0)//self.dt)))**2))
+
+        min_amp = .01 if min_amp < .01 else min_amp
         assert bounds.shape == source_locations.shape
         eps=1e-8
         rshp = torch.abs(bounds-source_locations).reshape(-1,2)
@@ -63,7 +66,7 @@ class puff_model():
             # tm = torch.linspace(0,(self.num_puffs-1)*self.dt).repeat(obs_t.shape[0],self.num_source_locs,1)*self.dt
             tm = step*self.dt
             t0 = tr - tm
-            zero = (t0 >= 0).int()
+            zero = (t0 >= self.t0).int()
             XM = torch.cat([XM1 - self.u_func_ivp(t0), XM2 - self.v_func_ivp(t0)],dim=2)
             eps=1e-10
             # zero = (tr - t0 > 0).float()
@@ -76,7 +79,7 @@ class puff_model():
             Q += self.dt*zero[:,:,0]/((2*torch.pi)**(3/2)*sy**2*sz) * torch.exp(-1*(  (XX[:,:,0] - XS[:,:,0] - XM[:,:,0])**2  + 
                                                                         (XX[:,:,1] - XS[:,:,1] - XM[:,:,1] )**2)/(2*sy**2))*(torch.exp(-1*((XX[:,:,2] - XS[:,:,2])**2)/(2*sz**2)) +
                                                                                                                        torch.exp( -1*((XX[:,:,2] + XS[:,:,2])**2)/(2*sz**2)))
-        return Q
+        return Q.float()
 
 
 

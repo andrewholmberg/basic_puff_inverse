@@ -49,17 +49,18 @@ class puff_inverse_model:
 
     def solve_inverse_problem(self,X,obs_t,obs,num_nz, bias_terms = 0,weights=None):
         num_obs = len(obs_t)
+        obs = obs.float()
         Q = self.pm.return_puff_matrix(X,obs_t)
         if weights is None:
             weights = torch.diag(torch.ones(torch.numel(obs))).float()
         if bias_terms == 1:
                 Q = torch.cat([Q, torch.ones(len(Q), 1)], dim=1)
-        elif bias_terms > 1:
-            bias_terms = obs.shape[1]
-            for bias in range(bias_terms):
-                temp = torch.zeros(torch.numel(obs),1)
-                temp[bias*num_obs:(bias+1)*num_obs] = 1.
-                Q = torch.cat([Q,temp],dim=1)
+        # elif bias_terms > 1:
+        #     bias_terms = obs.shape[1]
+        #     for bias in range(bias_terms):
+        #         temp = torch.zeros(torch.numel(obs),1)
+        #         temp[bias*num_obs:(bias+1)*num_obs] = 1.
+        #         Q = torch.cat([Q,temp],dim=1)
         P = 2*Q.T@weights@Q
         q = -2*obs.T.reshape(-1,1).T@weights@Q
         G = -1*torch.eye(P.shape[1] , P.shape[1])
@@ -89,7 +90,7 @@ class puff_inverse_model:
             Q = self.pm.return_puff_matrix(obs,obs_t)
         Q = torch.sum(Q,dim=1).reshape(-1,1)
         Q -= torch.min(Q)
-        Q/= torch.max(Q)
+        Q /= torch.max(Q)
         Q = 1 - Q
         # print(Q)
         W = torch.diag(Q.reshape(-1))

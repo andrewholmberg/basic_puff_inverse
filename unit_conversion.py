@@ -8,6 +8,6 @@ def convert_scaled_to_actual(model,tensor):
 def convert_wind(magnitude,direction,degrees=True):
     if degrees:
         direction = direction/(180)*pi
-    return magnitude * cos(direction), magnitude*sin(direction)
+    return -1*magnitude * sin(direction), -1*magnitude*cos(direction)
 
 # print(convert_wind(1,45))
